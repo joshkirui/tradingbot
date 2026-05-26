@@ -1,0 +1,22 @@
+﻿import MetaTrader5 as mt5
+
+# --- MT5 CONNECTION ---
+MT5_LOGIN = 2001385306
+MT5_PASSWORD = "Joshkirui@123"  # <--- Replace this with your real password
+MT5_SERVER = "JustMarkets-Demo"
+
+# --- TRADING SETTINGS ---
+SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "XAGUSD"]
+HTF = mt5.TIMEFRAME_H1    
+LTF = mt5.TIMEFRAME_M15   
+
+# --- EXECUTION ---
+EA_MAGIC = 20240525
+RISK_REWARD_RATIO = 3.0
+BREAK_EVEN_RR = 1.5
+ATR_SL_MULTIPLIER = 1.5
+MIN_LOT = 0.01
+MAX_LOT = 0.10
+DB_NAME = "frost_bot_data.db"
+TELEGRAM_TOKEN = "8964245113:AAFhkOde3G_s4acBhqiO1-BFrRMEbS8OSR0"
+TELEGRAM_CHAT_ID = "7890036882"
