@@ -1,0 +1,77 @@
+import time
+import MetaTrader5 as mt5
+from modules.data_engine import MT5Connection, get_candles, get_session, normalize_symbol, calculate_lots, WATCHLIST
+from modules.logic import score_setup
+from modules.telegram_utils import send_telegram_alert
+
+# --- LIVE CONFIG ---
+RISK_PER_TRADE = 1.0  # 1% of balance
+MAGIC_NUMBER = 202405 # ID for your bot trades
+TARGET_RR = 2.0
+
+def open_order(symbol, bias, entry, sl, tp, score):
+    """Sends the actual trade to MT5."""
+    symbol = normalize_symbol(symbol)
+    mt5.symbol_select(symbol, True)
+    
+    lots = calculate_lots(symbol, RISK_PER_TRADE, abs(entry - sl))
+    
+    order_type = mt5.ORDER_TYPE_BUY if bias == "bullish" else mt5.ORDER_TYPE_SELL
+    price = mt5.symbol_info_tick(symbol).ask if bias == "bullish" else mt5.symbol_info_tick(symbol).bid
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": float(lots),
+        "type": order_type,
+        "price": price,
+        "sl": float(sl),
+        "tp": float(tp),
+        "magic": MAGIC_NUMBER,
+        "comment": f"FrostBot Score {score}",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"[-] Order Failed: {result.comment}")
+    else:
+        print(f"[+] TRADE OPENED: {symbol} | Lots: {lots}")
+        send_telegram_alert(f"🚀 <b>Live Trade!</b>\nSym: {symbol}\nLots: {lots}\nScore: {score}")
+
+def main():
+    print("=== FrostBot LIVE execution started ===")
+    if not MT5Connection.ensure(): return
+
+    while True:
+        # Prevent double-trading: Check if we already have an open trade
+        positions = mt5.positions_get(group=f"*{normalize_symbol(WATCHLIST[0])[-2:]}") # Checks for .m suffix
+        
+        if len(positions) == 0: # Only scan if NO trades are open
+            for base_symbol in WATCHLIST:
+                symbol = normalize_symbol(base_symbol)
+                
+                # Fetch fresh data
+                df_h1 = get_candles(symbol, "H1", 50)
+                df_m15 = get_candles(symbol, "M15", 50)
+                df_m1 = get_candles(symbol, "M1", 50)
+                
+                if df_h1.empty or df_m1.empty: continue
+                
+                res = score_setup(df_h1, df_m15, df_m1, get_session(df_m1))
+                
+                if res["valid"]:
+                    print(f"\n[!] ALERT: Found Score {res['score']} on {symbol}")
+                    bias, poi = res["bias"], res["poi"]
+                    entry = mt5.symbol_info_tick(symbol).ask if bias == "bullish" else mt5.symbol_info_tick(symbol).bid
+                    sl = poi["low"] if bias == "bullish" else poi["high"]
+                    tp = entry + (abs(entry-sl)*TARGET_RR) if bias=="bullish" else entry - (abs(entry-sl)*TARGET_RR)
+                    
+                    open_order(symbol, bias, entry, sl, tp, res["score"])
+                    break # Stop scanning symbols for this minute after one entry
+
+        time.sleep(60) # Wait for the next M1 candle
+
+if __name__ == "__main__":
+    main()

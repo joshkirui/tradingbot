@@ -1,0 +1,26 @@
+# debug_score.py — run this standalone to see what's happening inside score_setup
+import MetaTrader5 as mt5
+from modules.data_engine import get_candles, normalize_symbol, MT5Connection, get_session
+from modules.logic import score_setup
+
+MT5Connection.ensure()
+
+symbol = "XAUUSD.m"  # Test one symbol directly
+
+df_h1 = get_candles(symbol, "H1", 100)
+df_m5 = get_candles(symbol, "M5", 100)
+
+print("=== DATA CHECK ===")
+print(f"H1 rows: {len(df_h1) if df_h1 is not None else 'NONE'}")
+print(f"M5 rows: {len(df_m5) if df_m5 is not None else 'NONE'}")
+print(f"\nH1 columns: {df_h1.columns.tolist() if df_h1 is not None else 'N/A'}")
+print(f"M5 columns: {df_m5.columns.tolist() if df_m5 is not None else 'N/A'}")
+print(f"\nH1 tail:\n{df_h1.tail(3) if df_h1 is not None else 'N/A'}")
+print(f"\nM5 tail:\n{df_m5.tail(3) if df_m5 is not None else 'N/A'}")
+
+session = get_session(df_m5)
+print(f"\nSession: {session}")
+
+print("\n=== SCORE SETUP RESULT ===")
+res = score_setup(df_h1, df_m5, session)
+print(res)  # Print the full raw result dict
