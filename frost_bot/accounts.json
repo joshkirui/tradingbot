@@ -1,0 +1,17 @@
+{
+    "demo": {
+        "login": "2001385306",
+        "password": "Joshkirui@123",
+        "server": "JustMarkets-Demo"
+    },
+    "Demo 10": {
+        "login": "2001989691",
+        "password": "Joshkirui@123",
+        "server": "JustMarkets-Demo"
+    },
+    "/analyze": {
+        "login": "/analyze",
+        "password": "/analyze",
+        "server": "/analyze"
+    }
+}

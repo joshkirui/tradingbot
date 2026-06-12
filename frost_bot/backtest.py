@@ -1,121 +1,78 @@
-import os, sys
 import pandas as pd
-import numpy as np
-from datetime import datetime
 import MetaTrader5 as mt5
-
-# Import your custom logic
-from modules.data_engine import get_candles, normalize_symbol, MT5Connection, get_session
+from datetime import timedelta
+from modules.data_engine import get_candles, normalize_symbol
 from modules.logic import score_setup
 
-# --- CONFIG ---
-WATCHLIST = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"] 
-BACKTEST_CANDLES = 15000  
-LOOKFORWARD = 180        
-MIN_SCORE_THRESHOLD = 6  # Added a variable for easy adjustment
-
-def simulate_trade_outcome(entry, sl, tp, bias, start_index, df_m1):
-    """
-    Checks future candles to see if price hits TP or SL first.
-    """
-    future_candles = df_m1.iloc[start_index + 1 : start_index + LOOKFORWARD]
-    
-    for _, candle in future_candles.iterrows():
-        if bias == "bullish":
-            if candle["low"] <= sl: return "loss"
-            if candle["high"] >= tp: return "win"
-        else: # bearish
-            if candle["high"] >= sl: return "loss"
-            if candle["low"] <= tp: return "win"
-            
-    return "expired"
+# --- $100 SIMULATION SETTINGS ---
+START_BALANCE = 100.0  
+RISK_PER_TRADE = 0.01  # $1.00 risk
 
 def run_backtest():
-    try:
-        MT5Connection.ensure()
-    except Exception as e:
-        print(f"Connection Error: {e}")
-        return []
+    mt5.initialize()
+    symbol = normalize_symbol("XAUUSD")
+    df_m5 = get_candles(symbol, "M5", 10000) 
+    df_m30 = get_candles(symbol, "M30", 1000); df_h4 = get_candles(symbol, "H4", 500)
+    df_d1 = get_candles(symbol, "D1", 200); df_mn1 = get_candles(symbol, "MN1", 24)
 
-    all_trades = []
-    
-    for base_symbol in WATCHLIST:
-        symbol = normalize_symbol(base_symbol)
-        print(f"\n[ANALYZING] {symbol}...")
+    trades = []
+    bal = START_BALANCE
+    cooldown_until = None 
+
+    print(f"--- $100 Small Account Backtest: {symbol} ---")
+
+    for i in range(100, len(df_m5) - 150):
+        now = df_m5.iloc[i]["time"]
+        if cooldown_until and now < cooldown_until: continue
+
+        res = score_setup(symbol, df_mn1[df_mn1["time"]<now].tail(2), df_d1[df_d1["time"]<now].tail(10),
+                          df_h4[df_h4["time"]<now].tail(10), df_m30[df_m30["time"]<now].tail(10), df_m5.iloc[i-15:i+1])
         
-        df_h1 = get_candles(symbol, "H1", 600)
-        df_m1 = get_candles(symbol, "M1", BACKTEST_CANDLES)
-        
-        if df_h1.empty or df_m1.empty:
-            print(f"  - No data for {symbol}")
-            continue
-
-        print(f"  - Loaded {len(df_m1)} M1 bars. Scanning for Score {MIN_SCORE_THRESHOLD}+ setups...")
-
-        for i in range(100, len(df_m1) - LOOKFORWARD, 15):
-            now_time = df_m1.iloc[i]["time"]
+        if res.get("valid"):
+            cooldown_until = now + timedelta(minutes=240)
+            entry, sl, tp, bias = res["entry"], res["sl"], res["tp"], res["bias"]
+            initial_risk_px = abs(entry - sl)
             
-            m1_slice = df_m1.iloc[i-100 : i]
-            h1_slice = df_h1[df_h1["time"] <= now_time].tail(50)
+            # Dollar risk based on 1% ($1.00)
+            dollar_risk = bal * RISK_PER_TRADE
             
-            session = get_session(m1_slice)
-            res = score_setup(h1_slice, m1_slice, session)
+            be_price = entry + (initial_risk_px * 3.0) if bias == "bullish" else entry - (initial_risk_px * 3.0)
+            partial_price = entry + (initial_risk_px * 5.0) if bias == "bullish" else entry - (initial_risk_px * 5.0)
             
-            # --- MODIFIED FILTER HERE ---
-            # Checks if logic is valid AND score is 6, 7, 8, or 9
-            if res["valid"] and res.get("score", 0) >= MIN_SCORE_THRESHOLD:
-                bias = res["bias"]
-                price = df_m1.iloc[i]["close"]
-                
-                poi = res["poi"]
-                if bias == "bullish":
-                    sl = poi["low"] 
-                    risk = abs(price - sl)
-                    tp = price + (risk * 2.0) 
-                else:
-                    sl = poi["high"]
-                    risk = abs(sl - price)
-                    tp = price - (risk * 2.0)
+            sl_at_be, partials_taken = False, False
+            outcome, r_gain = "expired", 0.0
+            future = df_m5.iloc[i+1 : i+144]
+            
+            for _, candle in future.iterrows():
+                high, low = candle["high"], candle["low"]
 
-                outcome = simulate_trade_outcome(price, sl, tp, bias, i, df_m1)
-                
-                if outcome != "expired":
-                    pnl = 20.0 if outcome == "win" else -10.0
-                    
-                    all_trades.append({
-                        "time": now_time,
-                        "symbol": symbol,
-                        "grade": res.get("grade", "B"),
-                        "score": res["score"],
-                        "bias": bias,
-                        "outcome": outcome,
-                        "pnl": pnl
-                    })
-                    print(f"  [SIGNAL FOUND] {now_time} | Score: {res['score']} ({res.get('grade')}) | {outcome.upper()}")
+                if not sl_at_be and ((bias=="bullish" and high>=be_price) or (bias=="bearish" and low<=be_price)):
+                    sl_at_be, sl = True, entry
+
+                if not partials_taken and ((bias=="bullish" and high>=partial_price) or (bias=="bearish" and low<=partial_price)):
+                    partials_taken = True
+                    if res["rr"] <= 5.0: outcome, r_gain = "win", res["rr"]; break
+
+                if (bias=="bullish" and low<=sl) or (bias=="bearish" and high>=sl):
+                    outcome = "be" if sl_at_be else "loss"
+                    r_gain = 2.5 if (partials_taken and sl_at_be) else (0.0 if sl_at_be else -1.0)
+                    break
+
+                if (bias=="bullish" and high >= tp) or (bias=="bearish" and low <= tp):
+                    outcome = "win"
+                    r_gain = (2.5 + (res["rr"] * 0.5)) if partials_taken else res["rr"]
+                    break
+            
+            if outcome != "expired":
+                trade_money = dollar_risk * r_gain
+                bal += trade_money
+                trades.append(r_gain)
+                print(f"[{now}] {outcome.upper():<7} | {r_gain:>5.2f}R | Net: ${trade_money:>6.2f} | Balance: ${bal:,.2f}")
 
     mt5.shutdown()
-    return all_trades
+    if trades:
+        print(f"\nFinal Statistics for $100 Account:")
+        print(f"Net Profit: ${bal - START_BALANCE:.2f} | Final Balance: ${bal:.2f}")
 
 if __name__ == "__main__":
-    print("=== FrostBot SMC PRO Backtester (High Quality Only) ===")
-    trades = run_backtest()
-    
-    if trades:
-        df = pd.DataFrame(trades)
-        print("\n" + "="*50)
-        print(f"BACKTEST RESULTS (SCORE {MIN_SCORE_THRESHOLD}+)")
-        print("="*50)
-        print(f"Total Trades: {len(df)}")
-        win_rate = (len(df[df['outcome']=='win'])/len(df))*100
-        print(f"Win Rate:     {win_rate:.1f}%")
-        print(f"Total Profit: ${df['pnl'].sum():.2f}")
-        print("-" * 50)
-        
-        if "grade" in df.columns:
-            grade_perf = df.groupby("grade").agg({'pnl': 'sum', 'outcome': 'count'})
-            grade_perf.columns = ['Total PnL', 'Trade Count']
-            print("Performance by Grade:")
-            print(grade_perf)
-        print("="*50)
-    else:
-        print(f"\nNo setups found with Score {MIN_SCORE_THRESHOLD}+.")
+    run_backtest()

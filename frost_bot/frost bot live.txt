@@ -40,6 +40,7 @@ def open_order(symbol, bias, entry, sl, tp, score):
         print(f"[+] TRADE OPENED: {symbol} | Lots: {lots}")
         send_telegram_alert(f"🚀 <b>Live Trade!</b>\nSym: {symbol}\nLots: {lots}\nScore: {score}")
 
+
 def main():
     print("=== FrostBot LIVE execution started ===")
     if not MT5Connection.ensure(): return

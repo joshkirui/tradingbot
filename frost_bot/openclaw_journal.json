@@ -1,0 +1,72 @@
+[
+    {
+        "timestamp": "2026-06-01 08:56:12",
+        "account": "demo",
+        "symbol": "USDCHF.m",
+        "bias": "bearish",
+        "score": 7,
+        "params": {
+            "entry": 0.7825,
+            "sl": 0.78263,
+            "tp": 0.7822399999999998,
+            "lots": 5.0
+        },
+        "status": "ENTRY"
+    },
+    {
+        "timestamp": "2026-06-03 04:05:18",
+        "account": "demo",
+        "symbol": "XAUUSD.m",
+        "bias": "bearish",
+        "score": 5,
+        "params": {
+            "entry": 4472.59,
+            "sl": 4479.17,
+            "tp": 4459.43,
+            "lots": 5.0
+        },
+        "status": "ENTRY"
+    },
+    {
+        "timestamp": "2026-06-03 05:29:25",
+        "account": "demo",
+        "symbol": "USDCAD.m",
+        "bias": "bullish",
+        "score": 7,
+        "params": {
+            "entry": 1.38419,
+            "sl": 1.38382,
+            "tp": 1.38493,
+            "lots": 5.0
+        },
+        "status": "ENTRY"
+    },
+    {
+        "timestamp": "2026-06-03 05:45:39",
+        "account": "demo",
+        "symbol": "GBPUSD.m",
+        "bias": "bearish",
+        "score": 7,
+        "params": {
+            "entry": 1.34634,
+            "sl": 1.34673,
+            "tp": 1.3455600000000003,
+            "lots": 5.0
+        },
+        "status": "ENTRY"
+    },
+    {
+        "timestamp": "2026-06-03 05:45:51",
+        "account": "Demo 10",
+        "symbol": "EURUSD.m",
+        "bias": "bearish",
+        "score": 7,
+        "params": {
+            "entry": 1.16262,
+            "sl": 1.1629,
+            "tp": 1.1620599999999999,
+            "lots": 5.0
+        },
+        "status": "ENTRY"
+    }
+]
